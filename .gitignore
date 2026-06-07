@@ -3,6 +3,8 @@
 # MacOS Python VS Code common GITIGNORE
 ########
 
+*test.py
+
 ## OS
 .DS_Store
 .AppleDouble
