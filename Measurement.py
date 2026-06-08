@@ -2,11 +2,6 @@
 # -*- coding: utf-8 -*-
 # author : Nathan Le Rétif
 
-"""
-Cette librairie a été crée dans le but d'automatiser la gestion et la propagation des incertitudes liées aux mesures physiques
-Le coeur de la librairie utilise numpy pour la vectorisation et les performanves du C
-Elle consiste à definir une serie de mesure comme un numpy.array 
-"""
 
 # Import des librairies
 import matplotlib.pyplot as plt
@@ -16,17 +11,18 @@ import numpy as np
 # Definition de la classe
 class Measure : 
 
+    # ============================== #
+    # Initialisation d'une instance  #
+    # ============================== #
+
     def __init__(self, value, sigma=None, Delta=None, unit=''):
 
-        if sigma is not None and Delta is not None : 
-            raise ValueError("sigma and Delta can't be defined simulatanously")
-        if sigma is None : 
-            sigma = 0
-        if Delta is not None : 
-            sigma = Delta / np.sqrt(3)
+        if sigma is not None and Delta is not None : raise ValueError("sigma and Delta can't be defined simulatanously")
+        elif sigma is None and Delta is None : sigma = 0
+        elif Delta is not None : sigma = Delta / np.sqrt(3)
 
-        value = np.atleast_1d(value)
-        sigma = np.atleast_1d(sigma)
+        value = np.atleast_1d(value,dtype=float)
+        sigma = np.atleast_1d(sigma,dtype=float)
         if sigma.shape != value.shape : 
             if sigma.size != 1 : 
                 raise ValueError('Sigma/Delta must be scalar or the same shape as the value')
@@ -35,6 +31,10 @@ class Measure :
         self.__value = value
         self.__sigma = sigma
         self.__unit = unit
+
+    # ====================== #
+    # Méthodes élémentaires  #
+    # ====================== #
 
     @property
     def value(self) : return self.__value
@@ -45,7 +45,6 @@ class Measure :
     @property
     def unit(self) : return self.__unit
 
-    
     def _round(self) : 
         zero_sigma = self.sigma==0
         safe_sigma = np.where(self.sigma==0,
@@ -61,7 +60,6 @@ class Measure :
                            np.round(self.value/factor) * factor )
         return rvalue, rsigma, odg, zero_sigma
         
-
     def __repr__(self):
         return (f"Measure("
                 f"value={self.value}, "
@@ -72,6 +70,10 @@ class Measure :
         rvalue, rsigma, odg, zero_sigma = self._round()
         rsigma = np.where(zero_sigma, 0, np.floor(rsigma*10**-odg))
         return '[' + ','.join(f'{v}({s}) '+self.unit for v,s in zip(rvalue, rsigma)) + ']'
+    
+    # ====================================== #
+    # Définition des opérateurs élémentaires #
+    # ====================================== #
 
     def __pos__(self):
         return Measure(self.value, self.sigma)
@@ -139,33 +141,41 @@ class Measure :
             sigma = np.abs(other*self.value**(other-1)) * self.sigma
             return Measure(value, sigma)
         return NotImplemented
-
     
+    # ============================================ #
+    # Propagation pour des fonctions quelquonques  #
+    # ============================================ #
+
     @staticmethod
-    def propagate (func , *measures) :
+    def JAXpropagate (func , *measures, **kwargs) :
         try : 
             import jax.numpy as jnp
             import jax
         except ImportError : 
-            raise ImportError("To use Measure.propagate, jax library must be installed : pip install jax")
+            raise ImportError("To use Measure.propagate, jax library must be installed")
         
         values = jnp.array([m.value for m in measures])
         sigmas = jnp.array([m.sigma for m in measures])
 
-        grad_f = jax.grad(lambda x : func(*x))
-        g = grad_f(*values)
+        grad_f = jax.grad(lambda x : func(*x), argnums= tuple(range(len(values))), **kwargs)
+        map_grad_f = jax.vmap(grad_f)
+        g = map_grad_f(*values)
 
         value = func(*values)
         sigma = jnp.sqrt(jnp.sum( (g * sigmas) ** 2 ))
 
         return Measure(value, sigma)
     
+    # ==================================== #
+    # Méthode d'affichage avec matplotlib  #
+    # ==================================== #
+    
     @staticmethod
     def errorbar (ax, x, y, **kwargs) :
         if not isinstance(x, Measure) : 
-            x = Measure(x, 0)
+            x = Measure(x)
         if not isinstance(y, Measure) : 
-            y = Measure(y, 0)
+            y = Measure(y)
         xvalue, xsigma = x._round()
         yvalue, ysigma = y._round()
         ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
