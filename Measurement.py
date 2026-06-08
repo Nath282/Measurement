@@ -176,8 +176,8 @@ class Measure :
             x = Measure(x)
         if not isinstance(y, Measure) : 
             y = Measure(y)
-        xvalue, xsigma = x._round()
-        yvalue, ysigma = y._round()
+        xvalue, xsigma, _, _ = x._round()
+        yvalue, ysigma, _, _ = y._round()
         ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
 
 
