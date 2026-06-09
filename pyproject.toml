@@ -1,7 +1,6 @@
 
 [project]
 name = "Measurement"
-version = "1.0"
 authors = [
     { name="Nathan Le Retif", email="nathan@leretif.com" }
 ]
