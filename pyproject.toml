@@ -1,7 +1,7 @@
 
 [project]
-name = "Measurement_Nathan_Le_Retif"
-version = "0.0.1"
+name = "Measurement"
+version = "1.0"
 authors = [
     { name="Nathan Le Retif", email="nathan@leretif.com" }
 ]
@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 license = "MIT"
-license-files = ["LICEN[CS]E*"]
+license-files = ["LICENCE"]
 dependencies = [
     "numpy",
     "matplotlib"
