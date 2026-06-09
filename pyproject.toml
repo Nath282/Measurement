@@ -1,0 +1,23 @@
+
+[project]
+name = "Measurement_Nathan_Le_Retif"
+version = "0.0.1"
+authors = [
+    { name="Nathan Le Retif", email="nathan@leretif.com" }
+]
+description = "A project to encapsulate and automatize the propagation of uncertainty for measurements in physics"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "numpy",
+    "matplotlib"
+]
+
+[project.urls]
+Homepage = "https://github.com/Nath282/Measurement"
