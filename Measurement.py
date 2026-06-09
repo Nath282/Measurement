@@ -171,14 +171,17 @@ class Measure :
     # ==================================== #
     
     @staticmethod
-    def errorbar (ax, x, y, **kwargs) :
+    def errorbar (ax, x, y, errors=True, **kwargs) :
         if not isinstance(x, Measure) : 
             x = Measure(x)
         if not isinstance(y, Measure) : 
             y = Measure(y)
         xvalue, xsigma, _, _ = x._round()
         yvalue, ysigma, _, _ = y._round()
-        ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
+        if errors : 
+            ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
+        else : 
+            ax.plot(xvalue, yvalue, **kwargs)
 
 
     
