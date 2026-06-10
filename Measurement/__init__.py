@@ -2,4 +2,4 @@
 # -*- coding: utf-8 -*-
 # author : Nathan Le Rétif
 
-from main import Measure
+from .main import Measure

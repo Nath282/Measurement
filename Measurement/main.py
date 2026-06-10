@@ -3,38 +3,46 @@
 # author : Nathan Le Rétif
 
 
-# Import des librairies
+# Library import 
 import matplotlib.pyplot as plt
 import numpy as np
 
+# =============== #
+# Class defintion #
+# =============== #
 
-# Definition de la classe
 class Measure : 
 
-    # ============================== #
-    # Initialisation d'une instance  #
-    # ============================== #
+    # ======================= #
+    # Instance initialisation #
+    # ======================= #
 
-    def __init__(self, value, sigma=None, Delta=None, unit=''):
+    def __init__(self, value, sigma=None, Delta=None):
 
+        # Parametrisation of sigma
         if sigma is not None and Delta is not None : raise ValueError("sigma and Delta can't be defined simulatanously")
         elif sigma is None and Delta is None : sigma = 0
         elif Delta is not None : sigma = Delta / np.sqrt(3)
 
-        value = np.atleast_1d(value,dtype=float)
-        sigma = np.atleast_1d(sigma,dtype=float)
+        # Conversion to numpy arrays
+        value = np.atleast_1d(value)
+        sigma = np.atleast_1d(sigma)
         if sigma.shape != value.shape : 
             if sigma.size != 1 : 
                 raise ValueError('Sigma/Delta must be scalar or the same shape as the value')
-            sigma = np.ones(value.shape ,dtype=float) * sigma
+            sigma = np.ones(value.shape) * sigma
 
+        # Exception when a value of sigma is negative
+        if np.any(sigma<0) : 
+            raise ValueError("sigma can't be strictly negative")
+
+        # Private attribute assignement
         self.__value = value
         self.__sigma = sigma
-        self.__unit = unit
 
-    # ====================== #
-    # Méthodes élémentaires  #
-    # ====================== #
+    # =================== #
+    # Elementary methods  #
+    # =================== #
 
     @property
     def value(self) : return self.__value
@@ -43,37 +51,67 @@ class Measure :
     def sigma(self) : return self.__sigma
 
     @property
-    def unit(self) : return self.__unit
+    def shape(self) : return self.value.shape
 
-    def _round(self) : 
-        zero_sigma = self.sigma==0
-        safe_sigma = np.where(self.sigma==0,
-                               1.,
-                               self.sigma)
-        odg = np.floor(np.log10(safe_sigma))
-        factor = 10.0 ** odg
-        rsigma = np.where(self.sigma==0,
-                           0,
-                           np.ceil(self.sigma/factor) * factor )
-        rvalue = np.where(self.sigma==0,
-                           self.value,
-                           np.round(self.value/factor) * factor )
-        return rvalue, rsigma, odg, zero_sigma
+    @property
+    def size(self) : return self.value.size
+
+    
+    def _format_data(self) : 
+        """
+        Private method rounding the uncertainties to the superior and rounding the values to the correct order of magnitude 
+        returns : - array rvalue corresponding to the rounded values
+            - array rsigma_int corresponding to the integer of the rounded sigmas, used for representation in __repr__
+            - array rsigma_dec corresponding to the rounded sigmas, used for plotting in errorbar
+        Rmq : RuntimeWarning errors encountered during execution (like division by zero) are masked but do not pose any problem
+        """
+        with np.errstate(divide='ignore',invalid='ignore') : 
+
+            # computation of correct order of magnitude
+            odg = np.floor(np.log10(self.sigma)) # returns a -np.inf is self.sigma==0
+            factor = 10 ** odg # returns 0. if a value is -np.inf
+            mask = np.isfinite(odg)
+
+            # rounding, np.where allows to process the above mentionned exception
+            rvalue = np.where(
+                mask,
+                np.round(self.value/factor) * factor,
+                self.value   )
+            rsigma_int = np.where(
+                mask,
+                np.ceil(self.sigma/factor),
+                0                ).astype(int)
+
+        rsigma_dec = rsigma_int * factor
+
+        return rvalue, rsigma_int, rsigma_dec
         
+
     def __repr__(self):
+        # returns all attribute of the class, useful for debugging
         return (f"Measure("
                 f"value={self.value}, "
-                f"sigma={self.sigma})"
-                f"unit={self.unit}" )
+                f"sigma={self.sigma})")
     
+
     def __str__(self):
-        rvalue, rsigma, odg, zero_sigma = self._round()
-        rsigma = np.where(zero_sigma, 0, np.floor(rsigma*10**-odg))
-        return '[' + ','.join(f'{v}({s}) '+self.unit for v,s in zip(rvalue, rsigma)) + ']'
+        # Method that returns the string of values under the form [7.56(4), 8.94(2),...] ; used for printing
+        rvalue, rsigma_int, _ = self._format_data()
+        if rvalue.size == 1 : 
+            return  f'{rvalue[0]}({rsigma_int[0]})'
+        return '[' + ','.join(f'{v}({s})' for v,s in zip(rvalue, rsigma_int)) + ']'
     
-    # ====================================== #
-    # Définition des opérateurs élémentaires #
-    # ====================================== #
+    def __len__(self):
+        return len(self.value)
+    
+    def __getitem__(self, key):
+        return Measure(self.value[key], self.sigma[key])
+    
+
+    
+    # ==================== #
+    # Elementary operators #
+    # ==================== #
 
     def __pos__(self):
         return Measure(self.value, self.sigma)
@@ -82,6 +120,7 @@ class Measure :
         return Measure(-self.value, self.sigma)
 
     def __add__(self, other):
+        # defines m1 + m2 and m1 + float
         if isinstance(other, Measure) :
             value = self.value + other.value
             sigma = np.sqrt(self.sigma**2 + other.sigma**2)
@@ -90,9 +129,10 @@ class Measure :
             return Measure(self.value + other , self.sigma)
         return NotImplemented
     
-    __radd__ = __add__ 
+    __radd__ = __add__ # defines float + m1
 
     def __sub__(self, other):
+        # defines m1 - m2 and m1 - float
         if isinstance(other, Measure) :
             value = self.value - other.value
             sigma = np.sqrt(self.sigma**2 + other.sigma**2)
@@ -102,33 +142,33 @@ class Measure :
         return NotImplemented
     
     def __rsub__(self, other):
+        # defines float - m1
         return Measure(other - self.value , self.sigma)
     
     def __mul__(self, other):
+        # defines m1 * m2 and m1 * float
         if isinstance(other, Measure) :
             value = self.value * other.value
             sigma = np.sqrt( (other.value*self.sigma)**2 + (self.value*other.sigma)**2 )
             return Measure(value, sigma)
         if np.isscalar(other) :
-            return Measure(self.value * other, self.sigma * other)
+            return Measure(self.value * other, self.sigma * np.abs(other))
         return NotImplemented
     
-    __rmul__ = __mul__
+    __rmul__ = __mul__ # defines float * m1
 
     def __truediv__(self, other):
+        # defines m1 / m2 and m1 / float
         if isinstance(other, Measure) :
             value = self.value / other.value
             sigma = np.abs(value) * np.sqrt( (self.sigma/self.value)**2 + (other.sigma/other.value)**2 )
             return Measure(value, sigma)
         if np.isscalar(other) :
-            return Measure(self.value / other, self.sigma / other)
+            return Measure(self.value / other, self.sigma / np.abs(other))
         return NotImplemented
         
     def __rtruediv__(self, other):
-        if isinstance(other, Measure) :
-            value = other.value / self.value
-            sigma = np.sqrt( (other.sigma*self.value)**2 + (self.sigma*other.value)**2 )
-            return Measure(value, sigma )
+        # defines float / m1
         if np.isscalar(other) :
             value = other/self.value
             sigma = np.abs(other/(self.value**2)) * self.sigma
@@ -136,33 +176,44 @@ class Measure :
         return NotImplemented
     
     def __pow__(self, other):
+        # defines m1 ** float
         if np.isscalar(other) :
             value = self.value ** other
             sigma = np.abs(other*self.value**(other-1)) * self.sigma
             return Measure(value, sigma)
         return NotImplemented
     
-    # ============================================ #
-    # Propagation pour des fonctions quelquonques  #
-    # ============================================ #
+    # ================================ #
+    # Propagation in complex functions #
+    # ================================ #
 
     @staticmethod
-    def JAXpropagate (func , *measures, **kwargs) :
+    def JAXpropagate (func, *measures, **kwargs) :
+        """
+        Static method allowing the propagation of uncertainties through complex fonction
+        Use JAX library to compute gradients : jax must be installed (pip install jax)
+        entry : - func : function to propagate, must be created using jax.numpy base functions
+            - *measures : array-like of instances of measure [m1,...,mN] such that y = func(m1,...,mN)
+            - **kwargs : special arguments to pass to jax.grad
+        returns : - an instance of Measure (y,u_y) such that y = func(m1,...,mN) and associated propagated uncertainties
+        """
         try : 
             import jax.numpy as jnp
-            import jax
+            from jax import grad, vmap
         except ImportError : 
             raise ImportError("To use Measure.propagate, jax library must be installed")
         
-        values = jnp.array([m.value for m in measures])
-        sigmas = jnp.array([m.sigma for m in measures])
+        values = jnp.array([m.value for m in measures],dtype=float)
+        sigmas = jnp.array([m.sigma for m in measures],dtype=float)
 
-        grad_f = jax.grad(lambda x : func(*x), argnums= tuple(range(len(values))), **kwargs)
-        map_grad_f = jax.vmap(grad_f)
-        g = map_grad_f(*values)
+        grad_f = grad(func, argnums= tuple(range(len(values))), **kwargs)
+        map_grad_f = vmap(grad_f)
+        g = jnp.asarray(map_grad_f(*values),dtype=float)
 
         value = func(*values)
-        sigma = jnp.sqrt(jnp.sum( (g * sigmas) ** 2 ))
+        sigma = jnp.sqrt(
+            jnp.sum((g*sigmas) ** 2,
+                    axis=0) )
 
         return Measure(value, sigma)
     
@@ -172,16 +223,25 @@ class Measure :
     
     @staticmethod
     def errorbar (ax, x, y, errors=True, **kwargs) :
+        """
+        Static method based on plt.errorbar to plot measures and their uncertainties
+        entry : - ax : instance of class Matplotlib.Axes to plot the value onto 
+            - x : instance of class measure or array-like to plot on the x-axis, if not a Measure instance, assumes errorbar to be null
+            - y : instance of class measure or array-like to plot on the y-axis, if not a Measure instance, assumes errorbar to be null, must be of same shape than x
+            - errors : bool to indicate whether or not plotting the errorbars
+            - **kwargs : special arguments to pass to the errorbar method, refer to plt.errorbar for further details
+        """
         if not isinstance(x, Measure) : 
             x = Measure(x)
         if not isinstance(y, Measure) : 
             y = Measure(y)
-        xvalue, xsigma, _, _ = x._round()
-        yvalue, ysigma, _, _ = y._round()
+        xvalue, _, xsigma = x._format_data()
+        yvalue, _, ysigma = y._format_data()
         if errors : 
             ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
         else : 
             ax.plot(xvalue, yvalue, **kwargs)
+
 
 
     
