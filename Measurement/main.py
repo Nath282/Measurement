@@ -192,19 +192,26 @@ class Measure :
         """
         Static method allowing the propagation of uncertainties through complex fonction
         Use JAX library to compute gradients : jax must be installed (pip install jax)
-        entry : - func : function to propagate, must be created using jax.numpy base functions
+        entry : - func : function to propagate, must initially be a scalar function, vectorized with jax.numpy base functions (for example f = lambda x,y : jnp.sqrt(x*y))
             - *measures : array-like of instances of measure [m1,...,mN] such that y = func(m1,...,mN)
             - **kwargs : special arguments to pass to jax.grad
         returns : - an instance of Measure (y,u_y) such that y = func(m1,...,mN) and associated propagated uncertainties
         """
+        # Check if jax library is installed
         try : 
             import jax.numpy as jnp
             from jax import grad, vmap
         except ImportError : 
             raise ImportError("To use Measure.propagate, jax library must be installed")
         
-        values = jnp.array([m.value for m in measures],dtype=float)
-        sigmas = jnp.array([m.sigma for m in measures],dtype=float)
+        # Check if Measure instances have the same shape
+        try : 
+            np.shape(measures) # raise an error if parts are inhomogeneous
+        except : 
+            raise ValueError('All meausure instances must be the same shape')
+
+        values = [ jnp.asarray(m.value,dtype=float) for m in measures ]
+        sigmas = [ jnp.asarray(m.sigma,dtype=float) for m in measures ]
 
         grad_f = grad(func, argnums= tuple(range(len(values))), **kwargs)
         map_grad_f = vmap(grad_f)
