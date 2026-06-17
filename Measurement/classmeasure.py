@@ -17,13 +17,14 @@ class Measure :
     # Instance initialisation #
     # ======================= #
 
-    def __init__(self, value, Delta=None ,sigma=None, type='B'):
+    def __init__(self, value, Delta=None ,sigma=None, type='B', unit=''):
 
         if type=='a' or type=='A' : 
 
             # Private attribute assignement
             self.__value = np.mean(value)
             self.__sigma = np.std(value)/np.sqrt(len(value))
+            self.__unit = unit
 
         elif type=='b' or type=='B' :
 
@@ -47,6 +48,7 @@ class Measure :
             # Private attribute assignement
             self.__value = value
             self.__sigma = sigma
+            self.__unit = unit
         
         else : raise ValueError('The uncertainty type must be defined (either A or B)')
         
@@ -60,6 +62,9 @@ class Measure :
 
     @property
     def sigma(self) : return self.__sigma
+
+    @property
+    def unit(self) : return self.__unit
 
     @property
     def shape(self) : return self.value.shape
@@ -101,20 +106,21 @@ class Measure :
     def __repr__(self):
         # returns all attribute of the class, useful for debugging
         return (f"Measure("
-                f"value={self.value}, "
-                f"sigma={self.sigma})")
+                f"value={self.value},"
+                f"sigma={self.sigma})"
+                f"unit={self.unit}")
     
 
     def __str__(self):
         # Method that returns the string of values under the form [7.56(4), 8.94(2),...] ; used for printing
         rvalue, rsigma_int, _ = self._format_data()
         if np.all(rsigma_int==0) :
-            if rvalue.size == 1 : return str(rvalue[0])
-            else : return str(rvalue)
+            if rvalue.size == 1 : return str(rvalue[0])+self.unit
+            else : return str(rvalue)+self.unit
 
         if rvalue.size == 1 : 
             return  f'{rvalue[0]}({rsigma_int[0]})'
-        return '[' + ','.join(f'{v}({s})' for v,s in zip(rvalue, rsigma_int)) + ']'
+        return '[' + ','.join(f'{v}({s})' for v,s in zip(rvalue, rsigma_int)) + ']'+self.unit
     
     def __len__(self):
         return len(self.value)
@@ -288,8 +294,33 @@ class Measure :
             ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
         else : 
             ax.plot(xvalue, yvalue, **kwargs)
+            
 
+    # ============================== #
+    # Data import method with pandas #
+    # ============================== #
 
+    @staticmethod
+    def read_csv(filename, sections=['Parameters'],**kwargs) : 
+        import pandas as pd
+        df = pd.read_csv(filename,header=None,**kwargs) 
+        ids = [(df[0]=='--'+s+'--').idxmax() for s in sections]
+        idData = (df[0]=='--Data--').idxmax()
+        metadata = {}
+        for k in range(len(sections)) :
+            if k==len(sections)-1 :
+                id1, id2 = ids[k], idData
+            else : 
+                id1, id2 = ids[k], ids[k+1]
+            section = df.iloc[id1+1:id2].set_index(0).squeeze()
+            try : 
+                section = pd.to_numeric(section)
+            except ValueError : 
+                pass
+            metadata[sections[k]] = section
+        xlabel, ylabel = iter(df.iloc[idData+1])
+        data = df.iloc[idData+2:].to_numpy(dtype=float)
+        return metadata, data, (xlabel,ylabel)
             
 
 
