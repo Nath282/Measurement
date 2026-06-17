@@ -2,4 +2,5 @@
 # -*- coding: utf-8 -*-
 # author : Nathan Le Rétif
 
-from .main import Measure
+from .classmeasure import Measure
+from .classdataset import DataSet
