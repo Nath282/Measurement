@@ -17,28 +17,39 @@ class Measure :
     # Instance initialisation #
     # ======================= #
 
-    def __init__(self, value, sigma=None, Delta=None):
+    def __init__(self, value, Delta=None ,sigma=None, type='B'):
 
-        # Parametrisation of sigma
-        if sigma is not None and Delta is not None : raise ValueError("sigma and Delta can't be defined simulatanously")
-        elif sigma is None and Delta is None : sigma = 0
-        elif Delta is not None : sigma = Delta / np.sqrt(3)
+        if type=='a' or type=='A' : 
 
-        # Conversion to numpy arrays
-        value = np.atleast_1d(value)
-        sigma = np.atleast_1d(sigma)
-        if sigma.shape != value.shape : 
-            if sigma.size != 1 : 
-                raise ValueError('Sigma/Delta must be scalar or the same shape as the value')
-            sigma = np.ones(value.shape) * sigma
+            # Private attribute assignement
+            self.__value = np.mean(value)
+            self.__sigma = np.std(value)/np.sqrt(len(value))
 
-        # Exception when a value of sigma is negative
-        if np.any(sigma<0) : 
-            raise ValueError("sigma can't be strictly negative")
+        elif type=='b' or type=='B' :
 
-        # Private attribute assignement
-        self.__value = value
-        self.__sigma = sigma
+            # Parametrisation of sigma
+            if sigma is not None and Delta is not None : raise ValueError("sigma and Delta can't be defined simulatanously")
+            elif sigma is None and Delta is None : sigma = 0
+            elif Delta is not None : sigma = Delta / np.sqrt(3)
+
+            # Conversion to numpy arrays
+            value = np.atleast_1d(value)
+            sigma = np.atleast_1d(sigma)
+            if sigma.shape != value.shape : 
+                if sigma.size != 1 : 
+                    raise ValueError('Sigma/Delta must be scalar or the same shape as the value')
+                sigma = np.ones(value.shape) * sigma
+
+            # Exception when a value of sigma is negative
+            if np.any(sigma<0) : 
+                raise ValueError("sigma can't be strictly negative")
+
+            # Private attribute assignement
+            self.__value = value
+            self.__sigma = sigma
+        
+        else : raise ValueError('The uncertainty type must be defined (either A or B)')
+        
 
     # =================== #
     # Elementary methods  #
@@ -97,6 +108,10 @@ class Measure :
     def __str__(self):
         # Method that returns the string of values under the form [7.56(4), 8.94(2),...] ; used for printing
         rvalue, rsigma_int, _ = self._format_data()
+        if np.all(rsigma_int==0) :
+            if rvalue.size == 1 : return str(rvalue[0])
+            else : return str(rvalue)
+
         if rvalue.size == 1 : 
             return  f'{rvalue[0]}({rsigma_int[0]})'
         return '[' + ','.join(f'{v}({s})' for v,s in zip(rvalue, rsigma_int)) + ']'
@@ -108,7 +123,6 @@ class Measure :
         return Measure(self.value[key], self.sigma[key])
     
 
-    
     # ==================== #
     # Elementary operators #
     # ==================== #
@@ -161,7 +175,7 @@ class Measure :
         # defines m1 / m2 and m1 / float
         if isinstance(other, Measure) :
             value = self.value / other.value
-            sigma = np.abs(value) * np.sqrt( (self.sigma/self.value)**2 + (other.sigma/other.value)**2 )
+            sigma = np.sqrt( (self.sigma/other.value)**2 + (other.sigma*self.value/(other.value)**2)**2 )
             return Measure(value, sigma)
         if np.isscalar(other) :
             return Measure(self.value / other, self.sigma / np.abs(other))
@@ -182,6 +196,32 @@ class Measure :
             sigma = np.abs(other*self.value**(other-1)) * self.sigma
             return Measure(value, sigma)
         return NotImplemented
+    
+    # ===================== #
+    # Non trivial operators #
+    # ===================== #
+
+    def argmax(self) :
+        return np.argmax(self.value)
+
+    def max(self) : 
+        return self[self.argmax()]
+    
+    def argmin(self) :
+        return np.argmin(self.value)
+    
+    def min(self) : 
+        return self[self.argmin()]
+
+    def mean (self, type='std') :
+        avg = np.mean(self.value)
+        if type=='std' :
+            return Measure(avg, np.std(self.value,mean=avg)/np.sqrt(len(self)))
+        elif type=='sigma' : 
+            return Measure(avg, np.sum(self.sigma**2)/len(self))
+        else : 
+            raise ValueError('Uncertainty computation type must be defined (either std or sigma)')
+
     
     # ================================ #
     # Propagation in complex functions #
@@ -207,7 +247,7 @@ class Measure :
         # Check if Measure instances have the same shape
         try : 
             np.shape(measures) # raise an error if parts are inhomogeneous
-        except : 
+        except ValueError: 
             raise ValueError('All meausure instances must be the same shape')
 
         values = [ jnp.asarray(m.value,dtype=float) for m in measures ]
@@ -224,9 +264,9 @@ class Measure :
 
         return Measure(value, sigma)
     
-    # ==================================== #
-    # Méthode d'affichage avec matplotlib  #
-    # ==================================== #
+    # ===================================== #
+    # Méthodes d'affichage avec matplotlib  #
+    # ===================================== #
     
     @staticmethod
     def errorbar (ax, x, y, errors=True, **kwargs) :
@@ -248,6 +288,12 @@ class Measure :
             ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
         else : 
             ax.plot(xvalue, yvalue, **kwargs)
+
+
+            
+
+
+    
 
 
 
