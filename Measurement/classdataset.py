@@ -19,11 +19,11 @@ def _pattern_matching(value : list, sep = str) :
     # Check if value is equivalent to a measure, otherwise returns the remerged string
     if len(value) == 1 and _isscalar(value[0]) :
         res = Measure(float(value[0]))
-    elif len(value) == 2 and _isscalar(value[0]) and type(value[1])==str : 
+    elif len(value) == 2 and _isscalar(value[0]) and not _isscalar(value[1]) : 
         res = Measure(float(value[0]), unit=value[1])
     elif len(value) == 2 and _isscalar(value[0]) and _isscalar(value[1]) : 
         res = Measure(float(value[0]), float(value[1]))
-    elif len(value) == 3 and _isscalar(value[0]) and _isscalar(value[1]) and type(value[2])==str : 
+    elif len(value) == 3 and _isscalar(value[0]) and _isscalar(value[1]) and not _isscalar(value[2]) : 
         res = Measure(float(value[0]), float(value[1]), unit=value[2])
     else : 
         res = sep.join(value)

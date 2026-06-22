@@ -22,8 +22,8 @@ class Measure :
         if type=='a' or type=='A' : 
 
             # Private attribute assignement
-            self.__value = np.mean(value)
-            self.__sigma = np.std(value)/np.sqrt(len(value))
+            self.__value = np.atleast_1d(np.mean(value))
+            self.__sigma = np.atleast_1d(np.std(value)/np.sqrt(len(value)))
             self.__unit = unit
 
         elif type=='b' or type=='B' :
@@ -93,14 +93,14 @@ class Measure :
                 mask,
                 np.round(self.value/factor) * factor,
                 self.value   )
-            rsigma_int = np.where(
+            rsigma = np.where(
                 mask,
                 np.ceil(self.sigma/factor),
-                0                ).astype(int)
+                0                ).astype(int) * factor
 
-        rsigma_dec = rsigma_int * factor
+        #rsigma_dec = rsigma_int * factor
 
-        return rvalue, rsigma_int, rsigma_dec
+        return rvalue, rsigma
         
 
     def __repr__(self):
@@ -113,14 +113,14 @@ class Measure :
 
     def __str__(self):
         # Method that returns the string of values under the form [7.56(4), 8.94(2),...] ; used for printing
-        rvalue, rsigma_int, _ = self._format_data()
-        if np.all(rsigma_int==0) :
+        rvalue, rsigma = self._format_data()
+        if np.all(rsigma==0) :
             if rvalue.size == 1 : return str(rvalue[0])+self.unit
             else : return str(rvalue)+self.unit
 
         if rvalue.size == 1 : 
-            return  f'{rvalue[0]}({rsigma_int[0]})'
-        return '[' + ','.join(f'{v}({s})' for v,s in zip(rvalue, rsigma_int)) + ']'+self.unit
+            return  f'{rvalue[0]} ± {rsigma[0]}'
+        return '[' + ','.join(f'{v} ± {s}' for v,s in zip(rvalue, rsigma)) + ']'+self.unit
     
     def __len__(self):
         return len(self.value)
@@ -227,6 +227,9 @@ class Measure :
             return Measure(avg, np.sum(self.sigma**2)/len(self))
         else : 
             raise ValueError('Uncertainty computation type must be defined (either std or sigma)')
+        
+    def flip (self) : 
+        return Measure(np.flip(self.value), np.flip(self.sigma),unit=self.unit)
 
     
     # ================================ #
@@ -288,8 +291,8 @@ class Measure :
             x = Measure(x)
         if not isinstance(y, Measure) : 
             y = Measure(y)
-        xvalue, _, xsigma = x._format_data()
-        yvalue, _, ysigma = y._format_data()
+        xvalue, xsigma = x._format_data()
+        yvalue, ysigma = y._format_data()
         if errors : 
             ax.errorbar(xvalue, yvalue, xerr=xsigma, yerr=ysigma, **kwargs)
         else : 
