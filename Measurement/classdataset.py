@@ -8,27 +8,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from .classmeasure import Measure
 
-def _isscalar(x) : 
-    try :
-        float(x)
-        return True 
-    except ValueError : 
-        return False
-    
-def _pattern_matching(value : list, sep = str) :
-    # Check if value is equivalent to a measure, otherwise returns the remerged string
-    if len(value) == 1 and _isscalar(value[0]) :
-        res = Measure(float(value[0]))
-    elif len(value) == 2 and _isscalar(value[0]) and not _isscalar(value[1]) : 
-        res = Measure(float(value[0]), unit=value[1])
-    elif len(value) == 2 and _isscalar(value[0]) and _isscalar(value[1]) : 
-        res = Measure(float(value[0]), float(value[1]))
-    elif len(value) == 3 and _isscalar(value[0]) and _isscalar(value[1]) and not _isscalar(value[2]) : 
-        res = Measure(float(value[0]), float(value[1]), unit=value[2])
-    else : 
-        res = sep.join(value)
-    return res
-
 
 # =============== #
 # Class defintion #
@@ -77,8 +56,8 @@ class DataSet :
     def _parse_section(lines, sep) :
         parameters = {}
         for line in lines : 
-            label, value = line[0], line[1:]
-            parameters[label] = _pattern_matching(value, sep)
+            ms = Measure._string_match(line, sep)
+            parameters[ms.label] = ms
         return parameters
 
 
@@ -111,7 +90,7 @@ class DataSet :
                     sections[current_section].append(line.split(sep))
 
             # Check if a data section has been found
-            if data_section not in sections.keys() : 
+            if data_section not in sections : 
                 raise ValueError("Data section coult not be found in the file")
             
             # Parsing ad formatting of each individual section
