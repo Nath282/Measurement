@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 # author : Nathan Le Rétif
 
+"""
+Definition of a Measure class to encapsulate the gestion and propagation of uncertainties in physics experiments, centered on a numpy architecture
+Elementary operators for computation are implemented so that operations like m1 + m2 does not require heavier treatment  
+More complex propagation can be made analatically through JAXpropagation method which requires the jax module or stochastically through MonteCarlo algorithm
+Uncertainties are not rounded in the Measure instance, rounding is made when exporting the data (like print or plot) to not overevaluate uncertainties
+Plotting through plt.errorbar is encapsulated in the Measure.errorbar method
+"""
 
 # Library import 
 import matplotlib.pyplot as plt
@@ -37,7 +44,7 @@ def _isscalar(x) :
         return False
 
 def _isstring(x) :
-    return isinstance(x, str)
+    return isinstance(x, str) and not _isscalar(x)
     
 
 # =============== #
@@ -132,24 +139,32 @@ class Measure :
     @staticmethod
     def _string_match(line : str, sep = ',') :
         """
-        match a string of the form 'Intensity,11.5,.1,mW,b' to Measure(11.5,.1,unc_type='b',label='Intensity',unit='mW') as best as possible
-        Careful : first string not recognized as types will be assumed to be the label and the second the unit
-                  first recognized scalar will be assumed to be the value and the second the uncertainty
+        match line (composed of scalars and caracter chains divided by sep) to a Measure instance according to the following rules :
+        - if no scalars are found, an error will be raised
+        - if exactly one scalar is found, will be assumed to be the value with no uncertainty
+        - if two scalar are found, the first one is assumed to be the value and the second one to be the unc
+        - if more than two scalar are found, the FIRST is assumed to be the UNIT and the rest is assumed to be all the values
+        - each string will be checked to be an unc_type, order does not matter but duplicates will raise an error
+        - first string not recognized as unc_type will be assumed to be the label
+        - second string not recognized as unc_type will be assumed to be the unit
+        - any more string in the line will raise an error 
+        CAREFUL : defining a Measure with unit but no label is currently impossible 
+                  parsing order for more than 2 scalars is reversed : unc,value1,value2,... instead of value,unc 
+                  defining a Measure with two values or more without expliciting uncertainty is currently impossible (assumed to be value,unc or unc,value1,value2,...)
+                  defining a Measure with non universal uncertainty is currently impossible
         """
         pieces = line.split(sep)
         unc_types = ['A','a','B','b','unchanged']
         kwargs = {}
+        scalars = []
 
         for piece in pieces : 
 
             piece = piece.strip()
+            #print(piece)
 
             if _isscalar(piece) : 
-                if 'value' not in kwargs : 
-                    kwargs['value'] = float(piece)
-                elif 'unc' not in kwargs : 
-                    kwargs['unc'] = float(piece)
-                else : raise ValueError("Too many numerical fields")
+                scalars.append(float(piece))
 
             elif piece in unc_types : 
                 if 'unc_type' not in kwargs : 
@@ -163,7 +178,19 @@ class Measure :
                     kwargs['unit'] = piece
             
             else : raise ValueError(f'Could not interpret {piece}')
-            
+
+        l = len(scalars)
+        if l==0 : 
+            raise ValueError("No numerical fields found")
+        elif l==1 : 
+            kwargs['value'] = scalars[0]
+        elif l==2 : 
+            kwargs['value'] = scalars[0]
+            kwargs['unc'] = scalars[1]
+        else : # when the number of numerical fields >2, assumes the first one to be the uncertainty
+            kwargs['unc'] = scalars[0]
+            kwargs['value'] = scalars[1:]
+                
         return Measure(**kwargs)
 
 
