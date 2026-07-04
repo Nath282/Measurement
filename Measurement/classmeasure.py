@@ -3,8 +3,14 @@
 # author : Nathan Le Rétif
 
 """
-Definition of a Measure class to encapsulate the gestion and propagation of uncertainties in physics experiments, centered on a numpy architecture
-Elementary operators for computation are implemented so that operations like m1 + m2 does not require heavier treatment  
+Defines a Measure class to encapsulate the gestion and propagation of uncertainties in physics experiments, centered on a numpy architecture
+Private Attributes : 
+    - self.__value (float array) : 1D numpy array containing all values of the measure
+    - self.__sigma (float array) : 1D numpy array of the same length as value containing the corresponding standard deviations
+Optionnal Attributes : 
+    - self.unit (string) : assigned unit of the Measure instance, purely informal attribute for printing or plotting -> is NOT conserved through propagation
+    - self.label (string) : assigned unit of the Measure instance, purely informal attribute for printing or plotting -> is NOT conserved through propagation
+Elementary operators for computation are implemented so that operations like m1 + m2 work directly
 More complex propagation can be made analatically through JAXpropagation method which requires the jax module or stochastically through MonteCarlo algorithm
 Uncertainties are not rounded in the Measure instance, rounding is made when exporting the data (like print or plot) to not overevaluate uncertainties
 Plotting through plt.errorbar is encapsulated in the Measure.errorbar method
@@ -12,6 +18,7 @@ Plotting through plt.errorbar is encapsulated in the Measure.errorbar method
 
 # Library import 
 import matplotlib.pyplot as plt
+from matplotlib.axes._axes import Axes 
 import numpy as np
 
 # =================== #
@@ -106,6 +113,12 @@ class Measure :
 
     @property
     def size(self) : return self.value.size
+
+    def unit(self, s) : 
+        self.unit = s
+
+    def label(self, s) :
+        self.label = s
 
     # =================== #
     # Private methods  #
@@ -392,6 +405,13 @@ class Measure :
 
     @staticmethod
     def MonteCarlo(estimator, *measures, N, distribution = np.random.normal) :
+        """
+        Static method using a Monte Carlo algorithm to compute the uncertainty of an estimator
+        Arguments : 
+            - estimator : function of propagation, must take len(measures) arguments
+            - *measures : list of Measure instance
+            - N : number of samples
+        """
 
         if np.any(np.array([len(m) for m in measures]) != len(measures[0]) ) : 
             raise ValueError("All measures must be the same length")
@@ -401,16 +421,16 @@ class Measure :
 
         samples = distribution(values, sigmas, size=(N, *values.shape))
 
-        res = np.asarray([estimator(*samples[n]) for n in range(N)])
+        results = np.asarray([estimator(*samples[n]) for n in range(N)])
 
-        return Measure(np.mean(res,axis=0), np.std(res,axis=0), unc_type='unchanged')
+        return (Measure(np.mean(res), np.std(res), unc_type='unchanged') for res in results)
     
-    # ===================================== #
-    # Méthodes d'affichage avec matplotlib  #
-    # ===================================== #
+    # ==================================== #
+    # Méthodes d'affichage avec matplotlib #
+    # ==================================== #
     
     @staticmethod
-    def errorbar (ax, x, y, errors=True, set_labels=True, **kwargs) :
+    def errorbar (ax, x, y, errors=True, set_labels=True, marker='.', ls='-', **kwargs) :
         """
         Static method based on plt.errorbar to plot measures and their uncertainties
         entry : - ax : instance of class Matplotlib.Axes to plot the value onto 
@@ -428,15 +448,32 @@ class Measure :
 
         # plotting
         if errors : 
-            ax.errorbar(x.value, y.value, xerr=x.sigma, yerr=y.sigma, **kwargs)
+            ax.errorbar(x.value, y.value, xerr=x.sigma, yerr=y.sigma, marker=marker, ls=ls, **kwargs)
         else : 
-            ax.plot(x.value, y.value, **kwargs)
+            ax.plot(x.value, y.value,  marker=marker, ls=ls, **kwargs)
 
         # Axes label setting
         if set_labels and (x.label!='' or x.unit!='') : 
             ax.set_xlabel(f"{x.label} ({x.unit})")
         if set_labels and (y.label!='' or y.unit!='') : 
             ax.set_ylabel(f"{y.label} ({y.unit})")
+
+    @staticmethod
+    def _single_hline(ax : Axes, y, xmin, xmax, alpha, label, **kwargs) :
+        if not isinstance(y, Measure) : 
+            y = Measure(y)
+        if len(y) > 1 : 
+            raise ValueError("Each measure must contain a single value")
+        ax.hlines(y.value, xmin, xmax, **kwargs)
+        ymax, ymin = y.value[0] + y.sigma[0], y.value[0] - y.sigma[0]
+        ax.fill_between([xmin,xmax], ymax, ymin, alpha=alpha, label=label, **kwargs)
+        
+    @staticmethod
+    def hlines (ax, y, xmin, xmax, label, alpha=.2, **kwargs) : 
+        if isinstance(y,list) or isinstance(y,np.ndarray) :
+            for m in y : 
+                Measure._single_hline(ax, m, xmin, xmax, alpha, label, **kwargs)
+        else : Measure._single_hline(ax, y, xmin, xmax, alpha, label, **kwargs)
         
 
     

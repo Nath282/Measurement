@@ -3,7 +3,7 @@
 # author : Nathan Le Rétif
 
 """
-Definition of a DataSet class based on the Measure class to encapsulating the reading of txt-like data files from devices and the conversion to Measure instances
+Defines a DataSet class based on the Measure class to encapsulating the reading of txt-like data files from devices and the conversion to Measure instances
 Specifically, the class was made to parse data but also metadata, usually found in such files, which can be useful for data treatment (like the devices paramters which could change for each value depending on the experiment)
 Attributes : - data : dictionary of key,value of the form m.label,m where m is a Measure instance
              - metadata : dictionnary storing all quantitative metadata parameters (each described by a Measure instance), organized in different sections (each containing their own parameters)
@@ -14,7 +14,7 @@ Rmq : only quantitative parameters are stored, purely textual information in the
 # Library import 
 import matplotlib.pyplot as plt
 import numpy as np
-from .classmeasure import Measure, _isscalar
+from .classmeasure import Measure
 
 
 # =============== #
