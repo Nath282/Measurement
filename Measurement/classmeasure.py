@@ -17,7 +17,6 @@ Plotting through plt.errorbar is encapsulated in the Measure.errorbar method
 """
 
 # Library import 
-import matplotlib.pyplot as plt
 from matplotlib.axes._axes import Axes 
 import numpy as np
 
@@ -96,8 +95,8 @@ class Measure :
             self.__sigma = unc
 
         # conversion to correct size numpy array
-        self.__value = np.atleast_1d(self.__value)
-        self.__sigma = np.atleast_1d(self.__sigma)
+        self.__value = np.asarray(self.__value)
+        self.__sigma = np.asarray(self.__sigma)
         if self.__value.size > 1 and self.__sigma.size == 1 : 
             self.__sigma = np.ones(self.__value.shape) * self.__sigma
 
@@ -114,10 +113,10 @@ class Measure :
     @property
     def size(self) : return self.value.size
 
-    def unit(self, s) : 
+    def set_unit(self, s) : 
         self.unit = s
 
-    def label(self, s) :
+    def set_label(self, s) :
         self.label = s
 
     # =================== #
@@ -174,7 +173,6 @@ class Measure :
         for piece in pieces : 
 
             piece = piece.strip()
-            #print(piece)
 
             if _isscalar(piece) : 
                 scalars.append(float(piece))
@@ -356,11 +354,91 @@ class Measure :
         
     def flip (self) : 
         return Measure(np.flip(self.value), np.flip(self.sigma), unc_type='unchanged', unit=self.unit, label=self.label)
+    
+    def interpolation(self, m, interpolation_mode='linear') :
+        if not isinstance(m, Measure) :
+            m = Measure(m)
+        if interpolation_mode == 'linear' :
+            ids = np.searchsorted(m.value, self.value)
+
+
+    # ==================================== #
+    # Propagation by Monte-Carlo algorithm #
+    # ==================================== #
+
+    @staticmethod
+    def MonteCarlo(estimator, *measures, N) :
+        """
+        Static method using a Monte Carlo algorithm to compute the uncertainty of an estimator assuming a normal distribution
+        Arguments : 
+            - estimator : function of propagation, must take len(measures) arguments and take estimator(*measures)
+            - *measures : list of Measure instance
+            - N : number of samples
+        """
+        if np.any(np.array([len(m) for m in measures]) != len(measures[0]) ) : 
+            raise ValueError("All measures must be the same length")
+        
+        # check wether the estimator returns a scalar or an array
+        estimator_res_type = 'array'
+        try : 
+            len(estimator(*measures))
+        except TypeError :
+            estimator_res_type = 'scalar'
+        
+        # Conversion of measures instances to numpy arrays 
+        values = np.asarray([m.value for m in measures])
+        sigmas = np.asarray([m.sigma for m in measures])
+
+        # Monte Carlo algorithm
+        samples = np.random.normal(values, sigmas, size=(N, *values.shape))
+        results = np.asarray([estimator(*samples[n]) for n in range(N)])
+        mean = np.mean(results, axis=0)
+        std =  np.std(results,axis=0)
+
+        # Convertion to measures instances
+        if estimator_res_type == 'array' :
+            return np.asarray([Measure(value,sigma, unc_type='unchanged') for value,sigma in zip(mean,std)])
+        elif estimator_res_type == 'scalar' :
+            [value], [sigma] = mean, std
+            return Measure(value, sigma, unc_type='unchanged')
+        else : 
+            return NotImplemented
+        
+
+    @staticmethod
+    def curve_fit(func, xdata, ydata, guess, N, ax=None, **kwargs) :
+        """
+        Static method adapting the MonteCarlo method to the specific case of curve_fitting
+        Arguments : 
+            - func : function to fit, must be of the form func(x, *args) where args are the fit parameters
+            - xdata, ydata : Measure instances to fit such that ydata = func(xdata, *args)
+            - guess : initial guess of parameters for fitting
+            - N : number of samples generated during the Monte Carlo algorithm
+            - ax : if not None, matplotlib axes on which to plot the guess estimated fit (useful for calibrating the initial guess) 
+            - **kwargs : special arguments for the fitting function
+        Scipy package must be installed in order to use the curve fit option
+        """
+        # Check for scipy package 
+        try : 
+            from scipy.optimize import curve_fit as scp_curve_fit
+        except ImportError :
+            raise ImportError("Scipy package must be installed to use curve_fit")
+
+        # if ax not None, plot the guessed fit on the given axis
+        if ax is not None :
+            X = np.linspace(xdata.min(), xdata.max(), 200)
+            ax.plot(X, func(X, *guess), label='guess')
+
+        # estimator definition and Monte-Carlo method
+        def estimator(xdata, ydata) :
+            args,_ = scp_curve_fit(func, xdata, ydata, p0=guess, **kwargs)
+            return args
+        return Measure.MonteCarlo(estimator, xdata, ydata, N=N)
 
     
-    # ================================ #
-    # Propagation in complex functions #
-    # ================================ #
+    # =========================================== #
+    # Analytical propagation in complex functions #
+    # =========================================== #
 
     @staticmethod
     def JAXpropagate (func, *measures, **kwargs) :
@@ -398,32 +476,7 @@ class Measure :
                     axis=0) )
 
         return Measure(value, sigma, unc_type='unchanged')
-    
-    # ==================================== #
-    # Propagation by Monte-Carlo algorithm #
-    # ==================================== #
 
-    @staticmethod
-    def MonteCarlo(estimator, *measures, N, distribution = np.random.normal) :
-        """
-        Static method using a Monte Carlo algorithm to compute the uncertainty of an estimator
-        Arguments : 
-            - estimator : function of propagation, must take len(measures) arguments
-            - *measures : list of Measure instance
-            - N : number of samples
-        """
-
-        if np.any(np.array([len(m) for m in measures]) != len(measures[0]) ) : 
-            raise ValueError("All measures must be the same length")
-        
-        values = np.asarray([m.value for m in measures])
-        sigmas = np.asarray([m.sigma for m in measures])
-
-        samples = distribution(values, sigmas, size=(N, *values.shape))
-
-        results = np.asarray([estimator(*samples[n]) for n in range(N)])
-
-        return (Measure(np.mean(res), np.std(res), unc_type='unchanged') for res in results)
     
     # ==================================== #
     # Méthodes d'affichage avec matplotlib #
@@ -434,8 +487,8 @@ class Measure :
         """
         Static method based on plt.errorbar to plot measures and their uncertainties
         entry : - ax : instance of class Matplotlib.Axes to plot the value onto 
-            - x : instance of class measure or array-like to plot on the x-axis, if not a Measure instance, assumes errorbar to be null
-            - y : instance of class measure or array-like to plot on the y-axis, if not a Measure instance, assumes errorbar to be null, must be of same shape than x
+            - x : instance of class measure or array-like to plot on the x-axis, 
+            - y : instance of class measure or array-like to plot on the y-axis, must be of same shape than x
             - errors : bool to indicate whether or not plotting the errorbars
             - **kwargs : special arguments to pass to the errorbar method, refer to plt.errorbar for further details
         """
@@ -459,21 +512,21 @@ class Measure :
             ax.set_ylabel(f"{y.label} ({y.unit})")
 
     @staticmethod
-    def _single_hline(ax : Axes, y, xmin, xmax, alpha, label, **kwargs) :
+    def _single_hline(ax : Axes, y, xmin, xmax, label, alpha, ls, **kwargs) :
         if not isinstance(y, Measure) : 
             y = Measure(y)
         if len(y) > 1 : 
             raise ValueError("Each measure must contain a single value")
-        ax.hlines(y.value, xmin, xmax, **kwargs)
+        ax.hlines(y.value, xmin, xmax, ls=ls, **kwargs)
         ymax, ymin = y.value[0] + y.sigma[0], y.value[0] - y.sigma[0]
         ax.fill_between([xmin,xmax], ymax, ymin, alpha=alpha, label=label, **kwargs)
         
     @staticmethod
-    def hlines (ax, y, xmin, xmax, label, alpha=.2, **kwargs) : 
+    def hlines (ax, y, xmin, xmax, label, alpha=.2, ls='-', **kwargs) : 
         if isinstance(y,list) or isinstance(y,np.ndarray) :
             for m in y : 
-                Measure._single_hline(ax, m, xmin, xmax, alpha, label, **kwargs)
-        else : Measure._single_hline(ax, y, xmin, xmax, alpha, label, **kwargs)
+                Measure._single_hline(ax, m, xmin, xmax, label, alpha, ls, **kwargs)
+        else : Measure._single_hline(ax, y, xmin, xmax, label, alpha, ls, **kwargs)
         
 
     
